@@ -33,45 +33,66 @@ npm run dev:client # Vite dev client — KQ_CLIENT_PORT (default 5200), proxies 
 Ports are env-configurable (`KQ_SERVER_PORT`, `KQ_CLIENT_PORT`) so v2 runs
 alongside the legacy build (hardcoded :3000) for side-by-side feel comparison.
 
-## Status — Phases 0, 1 & 2 complete
+## Status — Phases 0–3 complete (browser-playable)
 
 - ✅ TypeScript + Vite skeleton (`shared` / `server` / `client`), builds and typechecks.
 - ✅ `GameSession` is instantiable and room-aware; per-session event bus (no global bubble).
 - ✅ `CONST` tuning values ported **verbatim** (`shared/const.ts`) — do not "clean up".
-- ✅ Full entity engine in `server/entities.ts` (physics, collisions, combat, snail,
-  gates, eggs/queen), driven by a deterministic per-tick game clock.
-- ✅ Lobby + join-by-code rooms: lobby logic on `GameSession`, `RoomManager`, and a
-  Socket.IO **v4** server (`server/index.ts`) routing targeted events + driving the loop.
-- ✅ cucumber-js wired to `../docs/features`: **all 72 scenarios green** (58 engine,
-  10 lobby, 4 rooms). End-to-end transport verified by `scripts/smoke-socket.mjs`.
+- ✅ Full entity engine in `server/entities.ts`, driven by a deterministic per-tick clock.
+- ✅ Lobby + join-by-code rooms: lobby logic on `GameSession`, `RoomManager`, Socket.IO **v4** server.
+- ✅ **Client**: classic level as data (`shared/levels/classic.ts`), direct-DOM field
+  renderer (`client/renderer.ts`), React menu chrome (`client/App.tsx`), keyboard input.
+- ✅ **All 72 scenarios green** (58 engine, 10 lobby, 4 rooms); transport verified by
+  `scripts/smoke-socket.mjs`, renderer by `scripts/verify-renderer.mjs`.
 
 The spec is the contract: the rewrite is done when those scenarios go green.
 
-### Running the spec
+## How to play
+
+Run the server and the Vite client in two terminals, then open the page:
 
 ```
-npm test                          # full suite — 72 green
-npm test -- --tags "not @lobby"   # engine only
-npm test -- --tags "@rooms"       # one subsystem
-node scripts/smoke-socket.mjs     # e2e socket smoke (needs a running server, see below)
+npm run dev:server   # game server  — KQ_SERVER_PORT (default 3100)
+npm run dev:client   # Vite client  — KQ_CLIENT_PORT (default 5200)
 ```
 
-### Running the server
+Open `http://localhost:5200` → **Create new room** (or enter a code to join),
+pick a character, hit **Ready**. A match starts once every connected player in
+the room is ready (a single readied player starts a solo match). Open a second
+tab and join the same code for a second player; use a different code for an
+independent game.
+
+### Controls
+
+Keyboard only (the arrow keys). One player per browser tab; each tab controls
+the character it picked in the lobby.
+
+| Key | Action |
+|-----|--------|
+| **← / →** (ArrowLeft / ArrowRight) | Move left / right at the toon's current speed (worker 2, speed-upgraded or warrior 3, super-warrior 4). |
+| **↑** (ArrowUp) | Jump. A **worker** jumps only from the ground (or hops off the snail); a **warrior** or **queen** flies — each press is one upward impulse. Holding the key does **not** repeat-fire (it's consumed each tick), so flight is press-press-press. |
+| **↓** (ArrowDown) | Descend while airborne (a grounded toon can't duck). For the **queen** this is the dive pose. |
+
+There are no dedicated attack or berry/snail buttons: warriors auto-attack an
+enemy they face and overlap, and workers pick up berries / mount the snail /
+use a gate on contact. Touch and tilt controls from the legacy build are not
+ported.
+
+### Other commands
 
 ```
-npm run dev:server   # Socket.IO server on KQ_SERVER_PORT (default 3100)
+npm test                          # full cucumber suite — 72 green
+npm run build                     # tsc --noEmit && vite build
+node scripts/verify-renderer.mjs  # headless jsdom check of the field renderer
+node scripts/smoke-socket.mjs     # e2e socket smoke (needs dev:server running on 3199)
 ```
-
-There is no playable client yet (Phase 3) and no level is loaded, so a started
-match broadcasts empty `VIRTUAL_UPDATE` batches. The lobby/rooms transport is live.
 
 ### Phases (see the plan)
 
-- **Phase 1** ✅ — core engine: entity model, physics, ~60fps loop on `GameSession`.
-- **Phase 2** ✅ — Socket.IO v4 transport, join-by-code rooms, typed wire protocol.
-- **Phase 3** — client: direct-DOM field renderer + React menu chrome; JSON levels
-  (this is what makes it browser-playable).
-- **Phase 4** — fold in the deliberate fidelity/quirk decisions, each with its scenario.
+- **Phase 1** ✅ — core engine.
+- **Phase 2** ✅ — Socket.IO v4 transport, join-by-code rooms.
+- **Phase 3** ✅ — client: field renderer + React chrome + JSON level (browser-playable).
+- **Phase 4** — fold in the deliberate fidelity/quirk decisions, each with its scenario, then cutover.
 
 ## Regenerating the pending steps
 

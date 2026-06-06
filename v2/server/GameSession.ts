@@ -208,6 +208,16 @@ export class GameSession implements EngineContext {
   removeUser(userId: string): void {
     const i = this.users.findIndex((u) => u.id === userId);
     if (i < 0) return;
+
+    // A disconnecting player abandons their toon mid-match. Release anything it
+    // was holding so the match isn't stranded — notably the snail, which would
+    // otherwise stay "ridden" forever and block everyone from remounting.
+    const toonId = this.users[i].toonId;
+    if (toonId) {
+      const toon = this.level.toons[toonId];
+      if (toon instanceof Worker) toon.abandon();
+    }
+
     this.users[i].toonId = null; // release the character
     this.users.splice(i, 1);
 

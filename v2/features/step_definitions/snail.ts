@@ -161,6 +161,13 @@ When("that rider is killed", function (this: KQWorld) {
   this.subject!.attacked();
 });
 
+When("the rider's player disconnects", function (this: KQWorld) {
+  // a second user stays connected so the empty-room reset timer isn't armed
+  this.session.addUser({ id: "keeper", keys: [], toonId: null, ready: false });
+  this.session.addUser({ id: "rider", keys: [], toonId: this.subject!.id, ready: true });
+  this.session.removeUser("rider");
+});
+
 // ---- snail victory ----------------------------------------------------------
 
 Given("a worker riding the snail toward a basket", function (this: KQWorld) {

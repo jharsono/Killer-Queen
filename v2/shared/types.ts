@@ -112,3 +112,9 @@ export interface LevelData {
   height: number;
   entities: LevelEntity[];
 }
+
+/** Ack payload sent to a client when it joins a room. */
+export interface JoinedPayload {
+  code: string;
+  level: LevelData;
+}

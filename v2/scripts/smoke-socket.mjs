@@ -59,7 +59,11 @@ try {
   check(true, "match starts (game_start) once both players ready");
 
   const vu = await wait(a, "virtual_update", 2000);
-  check(Array.isArray(vu), "the running match broadcasts virtual_update batches");
+  check(Array.isArray(vu) && vu.length > 0, "the running match broadcasts non-empty virtual_update batches");
+  check(
+    vu.some((o) => o.id === "teamBlue-queen"),
+    "the classic level loaded server-side (toons present in updates)",
+  );
 
   await new Promise((r) => setTimeout(r, 200));
   check(!leaked, "the OTHER room received no game_start / virtual_update (isolation)");

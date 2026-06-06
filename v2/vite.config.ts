@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 // The legacy build hardcodes port 3000. v2 keeps both ports env-configurable so
 // the old build (the behavior oracle) and the new build can run side by side
@@ -9,6 +10,7 @@ const SERVER_PORT = Number(process.env.KQ_SERVER_PORT ?? 3100);
 export default defineConfig({
   root: "client",
   publicDir: "../assets",
+  plugins: [react()],
   server: {
     port: CLIENT_PORT,
     proxy: {
