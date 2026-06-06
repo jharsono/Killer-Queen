@@ -244,7 +244,7 @@ legacy. Per Decision D the server is now multi-room; feature 01 is tested as one
 room, and `08_rooms_and_join_codes.feature` lands the rooms behavior with its own
 scenarios (principle 4).
 
-### Phase 3 — Client: field renderer + React chrome (Decisions A, C)
+### Phase 3 — Client: field renderer + React chrome (Decisions A, C) ✅ DONE
 **Goal:** the browser client on the new stack.
 
 - Direct-DOM field renderer applying `VIRTUAL_UPDATE` by element `id` + CSS
@@ -258,6 +258,27 @@ scenarios (principle 4).
 
 **Exit criteria:** full game playable in-browser on the new build; field feel
 matches the oracle; menu flows work in React.
+
+**Status (delivered):**
+- ✅ **Level as data** (Decision C): `v2/shared/levels/classic.ts` ports the
+  legacy `index.html` geometry + `style.css` sizes verbatim. The server loads it
+  per room (`RoomManager`) and sends it to the client on join; both ends lay out
+  the same arena. `cheerio`/`css` never introduced.
+- ✅ **Direct-DOM field renderer** (`v2/client/renderer.ts`) builds the field
+  from the level and applies `VIRTUAL_UPDATE` by id + CSS class toggles (ported
+  from `site.js`). No React in the game loop.
+- ✅ **React menu chrome** (`v2/client/App.tsx`): join-by-code, character select,
+  ready-up, countdown, game-over — React only for menus.
+- ✅ Keyboard input → `KEY_UPDATE` (`v2/client/input.ts`); entity sprites/styles
+  ported (`v2/client/styles.css`). `typecheck` + `vite build` pass.
+- ✅ Verified: socket smoke (`scripts/smoke-socket.mjs`) confirms a started match
+  broadcasts non-empty `VIRTUAL_UPDATE` with real toon ids; a jsdom renderer
+  check (`scripts/verify-renderer.mjs`) confirms field build + update application;
+  both dev servers boot and the client serves. **In-browser play is now possible.**
+
+**Caveat:** automated checks cover the wire, the renderer logic, and the build —
+not the actual rendered pixels / feel in a browser. A manual two-tab playtest
+(and the side-by-side oracle comparison) is the remaining confirmation.
 
 ### Phase 4 — Fidelity & quirk decisions
 **Goal:** land the deliberate behavior changes, each with its own scenario.
@@ -304,21 +325,18 @@ Quirks / likely bugs:
 
 ## Where to pick up next
 
-**Phases 0, 1, and 2 are complete** (see their Status blocks above). The `v2/`
-server runs join-by-code rooms over Socket.IO v4 and `npm test` reports **all 72
+**Phases 0–3 are complete** (see their Status blocks above). The `v2/` build is
+**browser-playable**: run the server + Vite client and open the page (see
+[../v2/README.md](../v2/README.md) "How to play"). `npm test` reports **all 72
 scenarios green** (engine + lobby + rooms).
 
-Begin **Phase 3** — client: field renderer + React chrome (Decisions A, C):
+Begin **Phase 4** — fidelity & quirk decisions:
 
-1. **JSON levels** (Decision C): author a level file (ground, queens, workers,
-   berries, goals, snail, baskets, gates, eggs) and load it per room via
-   `GameSession.loadLevel()` — feeding both server geometry and client layout.
-   This is what turns the (currently empty) `VIRTUAL_UPDATE` broadcasts into a
-   real game.
-2. Direct-DOM field renderer in `v2/client/` applying `VIRTUAL_UPDATE` by element
-   `id` + CSS classes (port the proven approach from [../site.js](../site.js));
-   capture keyboard input → `KEY_UPDATE`.
-3. **React for menu chrome only**: join-by-code entry, character select,
-   countdown, game-over.
-4. After Phase 3 the game is browser-playable. When a side-by-side feel
-   comparison is wanted, resolve the deferred oracle question (Phase 0 Status ⚠️).
+1. Work the **Behavior decisions to fold in** list (below) one at a time: add or
+   adjust the feature scenario first, then implement to green. Good first
+   targets remain the two cheap quirks (instant countdown is already in;
+   snail-win basket ownership is still latent).
+2. Manual confirmation: a two-tab in-browser playtest, and — once the oracle is
+   restored (Phase 0 Status ⚠️) — a side-by-side feel comparison before cutover.
+3. **Cutover** when the full suite is green and feel is confirmed: delete the
+   legacy root files; `v2/` becomes the app.

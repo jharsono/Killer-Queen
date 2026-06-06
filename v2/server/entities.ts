@@ -657,6 +657,21 @@ export class Worker extends Toon {
     this.berry = null;
   }
 
+  /**
+   * The controlling player disconnected. Release anything held (notably the
+   * snail, so it doesn't stay "ridden" forever) and freeze the toon off-stage
+   * until the next match start so it can't drift back and re-grab the snail.
+   */
+  abandon(): void {
+    this.ctx.level.snail?.dropRider(this);
+    this.snail = false;
+    this.berry = null;
+    this.active = false;
+    this.inactiveUntil = Infinity; // never auto-reactivates
+    this.left = CONST.ELEMENT_OFFSCREEN_OFFSET.left;
+    this.top = CONST.ELEMENT_OFFSCREEN_OFFSET.top;
+  }
+
   reset(): void {
     super.reset();
     this.speed = CONST.WORKER_SPEED;

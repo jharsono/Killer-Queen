@@ -79,6 +79,14 @@ Feature: The Snail and the Snail Win
     When that rider is killed
     Then the snail has no rider
 
+  @advanced @snail @lifecycle
+  Scenario: A disconnecting rider frees the snail
+    # Regression: a rider whose player disconnects must release the snail, or it
+    # stays "ridden" forever and nobody can remount.
+    Given a worker riding the snail
+    When the rider's player disconnects
+    Then the snail has no rider
+
   # --------------------------------------------------------------------------
   # SNAIL VICTORY
   # --------------------------------------------------------------------------

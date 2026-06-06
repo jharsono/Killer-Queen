@@ -6,6 +6,7 @@
  * GameSession with its own users, level, clock, and event bus. There is no
  * shared/global state between rooms.
  */
+import type { LevelData } from "../shared/types.js";
 import { GameSession } from "./GameSession.js";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no easily-confused chars
@@ -13,6 +14,9 @@ const CODE_LENGTH = 4;
 
 export class RoomManager {
   private readonly rooms = new Map<string, GameSession>();
+
+  /** Level loaded into each new room (omit in tests that want empty rooms). */
+  constructor(private readonly level?: LevelData) {}
 
   get size(): number {
     return this.rooms.size;
@@ -31,6 +35,7 @@ export class RoomManager {
     let room = this.rooms.get(code);
     if (!room) {
       room = new GameSession(code);
+      if (this.level) room.loadLevel(this.level);
       this.rooms.set(code, room);
     }
     return room;

@@ -12,6 +12,7 @@
 import { createServer } from "node:http";
 import { Server, type Socket } from "socket.io";
 import { CONST } from "../shared/const.js";
+import { CLASSIC_LEVEL } from "../shared/levels/classic.js";
 import type { Recipients } from "./GameSession.js";
 import { GameSession } from "./GameSession.js";
 import { RoomManager } from "./RoomManager.js";
@@ -22,7 +23,7 @@ const LOOP_MS = 1000 / 60;
 const httpServer = createServer();
 const io = new Server(httpServer, { cors: { origin: true } });
 
-const rooms = new RoomManager();
+const rooms = new RoomManager(CLASSIC_LEVEL);
 const wired = new Set<string>();
 const loops = new Map<string, ReturnType<typeof setInterval>>();
 
@@ -85,7 +86,8 @@ io.on("connection", (socket: Socket) => {
     wireRoom(session);
     socket.join(session.id);
     session.addUser({ id: userId, keys: [], toonId: null, ready: false });
-    socket.emit("joined", { code: session.id });
+    // send the room code + the level so the client can lay out the field
+    socket.emit("joined", { code: session.id, level: CLASSIC_LEVEL });
   });
 
   socket.on(CONST.USER_CHARACTER_SELECT, (data: { toonId: string }) => {
