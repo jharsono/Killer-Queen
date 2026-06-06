@@ -1,0 +1,6 @@
+{
+  "default": {
+    "import": ["features/support/**/*.ts", "features/step_definitions/**/*.ts"],
+    "paths": ["../docs/features/**/*.feature"]
+  }
+}
