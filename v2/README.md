@@ -33,19 +33,29 @@ npm run dev:client # Vite dev client — KQ_CLIENT_PORT (default 5200), proxies 
 Ports are env-configurable (`KQ_SERVER_PORT`, `KQ_CLIENT_PORT`) so v2 runs
 alongside the legacy build (hardcoded :3000) for side-by-side feel comparison.
 
-## Status — Phase 0 complete
+## Status — Phases 0 & 1 complete
 
 - ✅ TypeScript + Vite skeleton (`shared` / `server` / `client`), builds and typechecks.
 - ✅ `GameSession` is instantiable and room-aware; per-session event bus (no global bubble).
 - ✅ `CONST` tuning values ported **verbatim** (`shared/const.ts`) — do not "clean up".
-- ✅ cucumber-js wired to `../docs/features`; **68 scenarios all report pending (red)**.
+- ✅ Full entity engine in `server/entities.ts` (physics, collisions, combat, snail,
+  gates, eggs/queen), driven by a deterministic per-tick game clock.
+- ✅ cucumber-js wired to `../docs/features`: **58 engine scenarios green**
+  (features 02–07, `@core` + `@advanced`); 10 lobby scenarios pending (Phase 2).
 
 The spec is the contract: the rewrite is done when those scenarios go green.
 
+### Running the spec
+
+```
+npm test                       # full suite (engine green, lobby pending)
+npm test -- --tags "not @lobby"  # engine only — 58 green
+npm test -- --tags "@snail"      # one subsystem
+```
+
 ### Phases (see the plan)
 
-- **Phase 1** — core engine: entity model, physics, ~60fps loop on `GameSession`;
-  green the `@core` movement/physics/economy/snail/combat/queen scenarios.
+- **Phase 1** ✅ — core engine: entity model, physics, ~60fps loop on `GameSession`.
 - **Phase 2** — Socket.IO v4 transport, join-by-code rooms, typed wire protocol;
   green `01_lobby_and_match_flow`.
 - **Phase 3** — client: direct-DOM field renderer + React menu chrome; JSON levels.

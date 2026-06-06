@@ -14,9 +14,12 @@ socket wiring in [app.js](../../app.js). They are written per
    authentic Killer Queen arcade game. Deviations are flagged inline and
    collected in [FIDELITY.md](FIDELITY.md).
 
-These describe behavior; there is no test runner wired up yet. Standing up a
-step-definition harness that drives `Game` directly is Phase 0 of the
-modernization plan.
+As of Phase 0 of the modernization plan, these are **executable**: cucumber-js
+in [../../v2/](../../v2/) is wired to this directory and runs them as 68 pending
+scenarios (`cd v2 && npm test`). Step definitions live in
+`v2/features/step_definitions/`; they drive an instantiable `GameSession`
+headlessly. Phase 1+ replaces the pending bodies with real assertions, greening
+the suite slice by slice — "done" is when every scenario is green.
 
 ## Feature Files
 

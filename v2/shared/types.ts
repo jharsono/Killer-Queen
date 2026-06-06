@@ -77,3 +77,38 @@ export interface GameWin {
   team: Team;
   focus: { left: number; top: number };
 }
+
+/**
+ * The kinds of entity a level can contain. Legacy derived these from element
+ * id/class substrings while parsing index.html; v2 makes the kind explicit
+ * (Decision C: level geometry in JSON, fed to both server and client).
+ */
+export type EntityKind =
+  | "ground"
+  | "wall"
+  | "queen"
+  | "worker"
+  | "berry"
+  | "goal"
+  | "snail"
+  | "cage"
+  | "shrine-speed"
+  | "shrine-warrior"
+  | "egg";
+
+/** One placed entity in a level: kind + id + geometry. */
+export interface LevelEntity {
+  kind: EntityKind;
+  id: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** A complete level definition (geometry source for server + client). */
+export interface LevelData {
+  width: number;
+  height: number;
+  entities: LevelEntity[];
+}

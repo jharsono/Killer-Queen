@@ -127,7 +127,7 @@ one-time step once nothing references root.
 Big-bang rewrite, spec-driven. The new build lives alongside the old until
 cutover. Each phase greens a slice of the [features/](features/) suite.
 
-### Phase 0 — Scaffold + make the spec executable
+### Phase 0 — Scaffold + make the spec executable ✅ DONE
 **Goal:** target-stack skeleton, and the gospel turned into running (red) tests.
 
 - New project skeleton in **`v2/`** (own `package.json` + assets + ports — see
@@ -143,7 +143,29 @@ cutover. Each phase greens a slice of the [features/](features/) suite.
 **Exit criteria:** new skeleton builds; `cucumber-js` runs and lists every
 scenario as pending/red; old build still playable for comparison.
 
-### Phase 1 — Core engine (greenfield, room-aware)
+**Status (delivered):**
+- ✅ `v2/` scaffolded — TypeScript + Vite, ES modules, own `package.json` /
+  `node_modules` / copied `assets/`, env-configurable ports (`KQ_SERVER_PORT`
+  default 3100, `KQ_CLIENT_PORT` default 5200). `npm run build` and
+  `npm run typecheck` both pass. See [../v2/README.md](../v2/README.md).
+- ✅ `CONST` ported **verbatim** to `v2/shared/const.ts`; typed wire protocol
+  (`SYNCED_PROPS` = legacy `propsToCheck`, `VirtualUpdate`, `MenuUpdate`,
+  `GameWin`) in `v2/shared/types.ts`.
+- ✅ `GameSession` is instantiable and room-aware with a per-session
+  `EventEmitter` (no `Game.instance` singleton, no global bubble). Simulation
+  methods throw `NotImplemented` until their phase lands.
+- ✅ cucumber-js wired to the shared [features/](features/) (not duplicated):
+  `npm test` runs and reports **68 scenarios, all pending (red)**. Pending step
+  defs were bootstrapped via `v2/scripts/gen-pending-steps.mjs`.
+- ⚠️ **Oracle not currently runnable** — the root build can't boot as-is: no
+  root `node_modules`, and `app.js` does `require('socket.io')` while the root
+  manifest lists the wrong package (`socketio`) pinned to the 1.x `.listen()`
+  API. Restoring it means installing the correct legacy deps (`socket.io@1`,
+  `cheerio`, `css`) into root — which contradicts "leave the root manifest
+  untouched." **Deferred decision:** restore the oracle when Phase 1 feel checks
+  actually need a side-by-side comparison.
+
+### Phase 1 — Core engine (greenfield, room-aware) ✅ DONE
 **Goal:** the simulation, designed without a singleton, matching documented feel.
 
 - Build the entity model, physics, and the ~60fps loop as an instantiable
@@ -155,6 +177,34 @@ scenario as pending/red; old build still playable for comparison.
 
 **Exit criteria:** all engine `@core` scenarios green; physics feel matches the
 oracle in a manual check.
+
+**Status (delivered):**
+- ✅ Entity model in `v2/server/entities.ts` (Entity base → Ground / Toon /
+  Worker / Queen / Berry / Goal / Snail / SnailCage / Shrine / Egg), ported from
+  the legacy `game.js` hierarchy but session-scoped — every entity holds an
+  `EngineContext`, never a global.
+- ✅ Instantiable `GameSession` (`v2/server/GameSession.ts`) owns the level,
+  the entity list, a per-session `EventEmitter`, and the ordered loop (entity
+  physics pass → apply held keys → consume ArrowUp). No singleton, no bubble.
+- ✅ `CONST` ported **verbatim**; physics (gravity 0.2/cap 4, jump −5, speeds
+  2/3/4, snail 0.1, 0.1px collision nudge, screen-wrap) match the spec.
+- ✅ **All 58 engine scenarios green** (`@core` and `@advanced`) across features
+  02–07; `npm run typecheck` and `npm run build` pass. Feature 01 (lobby) is
+  the only suite still pending — it is Phase 2. Full run: 58 passed, 10 pending.
+
+**Design note — deterministic clock (deliberate modernization):** the legacy
+engine used `setTimeout`/`Date.now()` for invulnerability, attack duration, gate
+cooldown, and snail swallow — untestable and frame-independent. v2 advances a
+per-session game clock one loop interval per tick and models those as expiry
+checks (`clock >= expiresAt`). At steady ~60fps this is behaviorally identical
+but fully deterministic, which is what makes the spec executable. The ms
+durations in `CONST` are unchanged.
+
+**Behavior note — queen gate conversion:** the legacy code never actually wired
+a queen→shrine collision (only workers iterated shrines), so the documented
+`04` "queen converts a gate" scenario did not fire in the old build. v2 adds a
+queen shrine-overlap check to honor the (untagged, intended) scenario. Flagged
+here per principle 4; revisit during the oracle playtest.
 
 ### Phase 2 — Server, rooms, and the wire protocol (Decision D)
 **Goal:** Socket.IO v4 transport with multiple concurrent games.
@@ -227,12 +277,20 @@ Quirks / likely bugs:
 
 ---
 
-## Suggested first session
+## Where to pick up next
 
-Decisions A–D are confirmed (see table above) — start building.
+**Phases 0 and 1 are complete** (see their Status blocks above). The `v2/`
+engine is built and `npm test` reports 58 engine scenarios green, 10 lobby
+scenarios pending.
 
-1. Execute **Phase 0**: scaffold TypeScript + Vite + `GameSession` skeleton, wire
-   cucumber-js to [features/](features/) so every scenario lists as red, and
-   confirm the old build still runs as the oracle.
-2. Begin **Phase 1** engine work against the `@core` movement/physics scenarios,
-   porting the `CONST` tuning values verbatim.
+Begin **Phase 2** — server, rooms, and the wire protocol:
+
+1. Implement the stubbed lobby methods on `GameSession`
+   (`selectCharacter`, `setReady`, `getMenuState`) and the countdown/reset flow.
+2. Stand up the Socket.IO v4 transport in `v2/server/index.ts` with join-by-code
+   rooms (one `GameSession` per room) and the typed wire protocol from
+   `v2/shared/types.ts`.
+3. Replace the `v2/features/step_definitions/lobby_pending.ts` placeholders with
+   real steps and green `01_lobby_and_match_flow`.
+4. When a side-by-side feel comparison is needed, resolve the deferred oracle
+   question (see Phase 0 Status, ⚠️).
