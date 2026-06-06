@@ -6,10 +6,51 @@
  * advance the deterministic clock/loop, and let steps assert on engine state.
  */
 import { setWorldConstructor, World, type IWorldOptions } from "@cucumber/cucumber";
-import { GameSession, type SessionUser } from "../../server/GameSession.js";
+import { GameSession, type Scheduler, type SessionUser } from "../../server/GameSession.js";
 import type { Berry, Egg, Goal, Queen, Shrine, Snail, SnailCage, Toon, Worker } from "../../server/entities.js";
+import type { RoomManager } from "../../server/RoomManager.js";
 import { CONST } from "../../shared/const.js";
 import type { GameWin } from "../../shared/types.js";
+
+/** Deterministic timer source for lobby tests — records timers instead of firing. */
+export class FakeScheduler implements Scheduler {
+  timers: { id: number; fn: () => void; ms: number }[] = [];
+  private nextId = 1;
+
+  set(fn: () => void, ms: number): unknown {
+    const id = this.nextId++;
+    this.timers.push({ id, fn, ms });
+    return id;
+  }
+
+  clear(handle: unknown): void {
+    this.timers = this.timers.filter((t) => t.id !== handle);
+  }
+
+  pending(ms: number): { id: number; fn: () => void; ms: number }[] {
+    return this.timers.filter((t) => t.ms === ms);
+  }
+
+  flushAll(): void {
+    const due = [...this.timers];
+    this.timers = [];
+    for (const t of due) t.fn();
+  }
+}
+
+interface RecordedEvent {
+  event: string;
+  payload: { recipients?: "all" | string[]; [k: string]: unknown };
+}
+
+const LOBBY_EVENTS = [
+  CONST.MENU_UPDATE,
+  CONST.ALERT,
+  CONST.GAME_COUNTDOWN,
+  CONST.GAME_START,
+  CONST.GAME_WIN,
+  CONST.GAME_RESET,
+];
 
 interface Geo {
   left?: number;
@@ -46,6 +87,20 @@ export class KQWorld extends World {
   emittedWin?: GameWin;
 
   user?: SessionUser;
+  otherUser?: SessionUser;
+  lastUser?: SessionUser;
+
+  // lobby harness
+  fakeScheduler?: FakeScheduler;
+  recordedEvents: RecordedEvent[] = [];
+  prevToon: string | null = null;
+  releasedToon?: string;
+
+  // rooms harness
+  roomManager?: RoomManager;
+  roomA?: GameSession;
+  roomB?: GameSession;
+  selectResults: boolean[] = [];
 
   // scratch values for delta/sequence assertions
   prevLeft = 0;
@@ -158,6 +213,34 @@ export class KQWorld extends World {
   /** Advance game-time so a freshly spawned toon is no longer invulnerable. */
   clearSpawnInvulnerability(): void {
     this.session.advanceClock(CONST.TOON_RESET_DELAY + 1);
+  }
+
+  // ---- lobby harness --------------------------------------------------------
+
+  /** Recreate the session with a fake scheduler and record its lobby events. */
+  newLobbySession(): void {
+    this.fakeScheduler = new FakeScheduler();
+    this.session = new GameSession("test-room", this.fakeScheduler);
+    this.recordedEvents = [];
+    for (const ev of LOBBY_EVENTS) {
+      this.session.events.on(ev, (payload: RecordedEvent["payload"]) => {
+        this.recordedEvents.push({ event: ev, payload });
+      });
+    }
+  }
+
+  connect(): SessionUser {
+    const user: SessionUser = { id: this.id("user"), keys: [], toonId: null, ready: false };
+    this.session.addUser(user);
+    return user;
+  }
+
+  recorded(event: string): RecordedEvent["payload"][] {
+    return this.recordedEvents.filter((e) => e.event === event).map((e) => e.payload);
+  }
+
+  clearRecorded(): void {
+    this.recordedEvents = [];
   }
 }
 

@@ -206,7 +206,7 @@ a queen→shrine collision (only workers iterated shrines), so the documented
 queen shrine-overlap check to honor the (untagged, intended) scenario. Flagged
 here per principle 4; revisit during the oracle playtest.
 
-### Phase 2 — Server, rooms, and the wire protocol (Decision D)
+### Phase 2 — Server, rooms, and the wire protocol (Decision D) ✅ DONE
 **Goal:** Socket.IO v4 transport with multiple concurrent games.
 
 - Socket.IO **v4 from the start**; one `GameSession` per room; native Socket.IO
@@ -218,6 +218,31 @@ here per principle 4; revisit during the oracle playtest.
 
 **Exit criteria:** two independent matches run simultaneously with no cross-talk;
 lobby scenarios green.
+
+**Status (delivered):**
+- ✅ Lobby logic on `GameSession` (`selectCharacter`, `setReady`, countdown,
+  win→reset, disconnect→reset) emitting **recipient-targeted** events
+  (`menu_update`/`alert`/`game_countdown`/`game_start`/`game_win`/`game_reset`).
+  Time-delayed resets (8s post-win, 10s empty-room) go through an **injectable
+  scheduler** so they are deterministic in tests.
+- ✅ `RoomManager` (`v2/server/RoomManager.ts`) — join-by-code, one `GameSession`
+  per room, no shared state between rooms.
+- ✅ Socket.IO **v4** server (`v2/server/index.ts`) bridges socket events ↔
+  session methods, routes targeted events to the right sockets, and drives the
+  per-room ~60fps loop broadcasting `VIRTUAL_UPDATE`.
+- ✅ Character roster in `v2/shared/roster.ts` (1 queen + 4 workers per team).
+- ✅ **All 72 scenarios green**: feature `01_lobby_and_match_flow` (10) plus a
+  new `08_rooms_and_join_codes` (4) covering join-by-code + isolation, on top of
+  the 58 engine scenarios. `typecheck` + `build` pass.
+- ✅ End-to-end transport verified over real websockets
+  (`v2/scripts/smoke-socket.mjs`): two players join a room, ready up, the match
+  starts and broadcasts updates, and a third player in another room sees none of
+  it (isolation).
+
+**Note — feature 01's "single global instance":** that Background framing is
+legacy. Per Decision D the server is now multi-room; feature 01 is tested as one
+room, and `08_rooms_and_join_codes.feature` lands the rooms behavior with its own
+scenarios (principle 4).
 
 ### Phase 3 — Client: field renderer + React chrome (Decisions A, C)
 **Goal:** the browser client on the new stack.
@@ -279,18 +304,21 @@ Quirks / likely bugs:
 
 ## Where to pick up next
 
-**Phases 0 and 1 are complete** (see their Status blocks above). The `v2/`
-engine is built and `npm test` reports 58 engine scenarios green, 10 lobby
-scenarios pending.
+**Phases 0, 1, and 2 are complete** (see their Status blocks above). The `v2/`
+server runs join-by-code rooms over Socket.IO v4 and `npm test` reports **all 72
+scenarios green** (engine + lobby + rooms).
 
-Begin **Phase 2** — server, rooms, and the wire protocol:
+Begin **Phase 3** — client: field renderer + React chrome (Decisions A, C):
 
-1. Implement the stubbed lobby methods on `GameSession`
-   (`selectCharacter`, `setReady`, `getMenuState`) and the countdown/reset flow.
-2. Stand up the Socket.IO v4 transport in `v2/server/index.ts` with join-by-code
-   rooms (one `GameSession` per room) and the typed wire protocol from
-   `v2/shared/types.ts`.
-3. Replace the `v2/features/step_definitions/lobby_pending.ts` placeholders with
-   real steps and green `01_lobby_and_match_flow`.
-4. When a side-by-side feel comparison is needed, resolve the deferred oracle
-   question (see Phase 0 Status, ⚠️).
+1. **JSON levels** (Decision C): author a level file (ground, queens, workers,
+   berries, goals, snail, baskets, gates, eggs) and load it per room via
+   `GameSession.loadLevel()` — feeding both server geometry and client layout.
+   This is what turns the (currently empty) `VIRTUAL_UPDATE` broadcasts into a
+   real game.
+2. Direct-DOM field renderer in `v2/client/` applying `VIRTUAL_UPDATE` by element
+   `id` + CSS classes (port the proven approach from [../site.js](../site.js));
+   capture keyboard input → `KEY_UPDATE`.
+3. **React for menu chrome only**: join-by-code entry, character select,
+   countdown, game-over.
+4. After Phase 3 the game is browser-playable. When a side-by-side feel
+   comparison is wanted, resolve the deferred oracle question (Phase 0 Status ⚠️).

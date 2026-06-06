@@ -14,12 +14,12 @@ socket wiring in [app.js](../../app.js). They are written per
    authentic Killer Queen arcade game. Deviations are flagged inline and
    collected in [FIDELITY.md](FIDELITY.md).
 
-As of Phase 0 of the modernization plan, these are **executable**: cucumber-js
-in [../../v2/](../../v2/) is wired to this directory and runs them as 68 pending
-scenarios (`cd v2 && npm test`). Step definitions live in
-`v2/features/step_definitions/`; they drive an instantiable `GameSession`
-headlessly. Phase 1+ replaces the pending bodies with real assertions, greening
-the suite slice by slice — "done" is when every scenario is green.
+These are **executable**: cucumber-js in [../../v2/](../../v2/) is wired to this
+directory (`cd v2 && npm test`). Step definitions in
+`v2/features/step_definitions/` drive an instantiable `GameSession` (and, for
+rooms, a `RoomManager`) headlessly. As of Phase 2, **all 72 scenarios are
+green** — the engine (02–07), the lobby (01), and rooms (08). "Done" for a slice
+is when its scenarios pass.
 
 ## Feature Files
 
@@ -37,6 +37,9 @@ the suite slice by slice — "done" is when every scenario is green.
   effects, invulnerability, warrior→worker respawn, queen-vs-queen.
 - **07_queen_and_victory.feature** — egg-based queen respawn, three-kill
   military victory, game-over presentation.
+- **08_rooms_and_join_codes.feature** — join-by-code rooms and cross-room
+  isolation (Decision D; a deliberate change from the legacy single-instance
+  model documented in 01).
 
 ## Tag Reference
 
