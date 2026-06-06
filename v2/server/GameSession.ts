@@ -1,56 +1,261 @@
 /**
  * GameSession — one independent game/room.
  *
- * This replaces the legacy `Game` singleton. The legacy engine referenced a
- * single global `Game.instance` 77 times and bubbled every event to it, which
- * is exactly what blocked multiple concurrent games. GameSession is
- * instantiable and room-aware from line one: each instance owns its own users,
- * entities, loop, and event bus (a plain Node EventEmitter — NO global bubble).
+ * Replaces the legacy `Game` singleton: instantiable and room-aware, with its
+ * own level, entities, deterministic game clock, and a per-session EventEmitter
+ * for flow/win events (no global `Game.instance`, no global event bubble).
  *
- * Phase 0 establishes the SHAPE only. The simulation (physics, entities, the
- * ~60fps loop) is Phase 1; the Socket.IO transport + rooms wiring is Phase 2.
- * Methods that belong to later phases throw NotImplemented so the cucumber
- * spec stays honestly red until the behavior actually exists.
+ * Phase 1 implements the simulation (entity model, physics, the loop). The
+ * Socket.IO transport + lobby wiring is Phase 2 — the lobby methods below stay
+ * stubbed until then.
  */
 import { EventEmitter } from "node:events";
 import { CONST } from "../shared/const.js";
-import type { GameWin, MenuUpdate, VirtualUpdate, WinType, Team } from "../shared/types.js";
+import type { GameWin, LevelData, MenuUpdate, Team, VirtualUpdate, WinType, EntityKind } from "../shared/types.js";
+import {
+  Berry,
+  Egg,
+  Entity,
+  Goal,
+  Ground,
+  type EngineContext,
+  type Level,
+  Queen,
+  Shrine,
+  ShrineSpeed,
+  ShrineWarrior,
+  Snail,
+  SnailCage,
+  Toon,
+  Worker,
+} from "./entities.js";
 
 /** A connected participant in this session. */
 export interface SessionUser {
-  /** Stable per-connection id. */
   id: string;
-  /** Currently held input keys (e.g. "ArrowLeft"). */
   keys: string[];
-  /** The character this user has claimed, if any (e.g. "teamBlue-queen"). */
   toonId: string | null;
-  /** Whether the user has readied up. */
   ready: boolean;
 }
 
+interface Geometry {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 function notImplemented(what: string): never {
-  // Boneheaded if reached in production, but here it is the spec's red marker:
-  // these paths are deliberately unbuilt until their phase lands.
   throw new Error(`GameSession.${what} is not implemented yet (later modernization phase)`);
 }
 
-export class GameSession {
-  /** Join-by-code room identifier (Decision D). */
+/** Loop interval — the legacy ~60fps tick; one game-clock step. */
+const LOOP_MS = 1000 / 60;
+
+export class GameSession implements EngineContext {
   readonly id: string;
-
-  /** Per-session event bus. Replaces the legacy global event bubble. */
   readonly events = new EventEmitter();
-
   readonly users: SessionUser[] = [];
 
-  private gameInProgress = false;
-  private loopHandle: ReturnType<typeof setInterval> | null = null;
+  /** Game-time in ms. Advances one LOOP_MS per tick (deterministic). */
+  clock = 0;
+
+  readonly level: Level = {
+    width: 800,
+    height: 600,
+    toons: {},
+    snail: null,
+    snailCages: [],
+    shrines: [],
+    goals: [],
+    berries: [],
+    ground: [],
+    eggs: [],
+  };
+
+  /** Every entity, in creation order — the loop iterates this. */
+  private readonly entities: Entity[] = [];
+
+  private running = false;
+  /** The most recently resolved win (test-observable; also emitted). */
+  lastWin: GameWin | null = null;
 
   constructor(id: string) {
     this.id = id;
   }
 
-  // ---- Lobby (Phase 2 wires this to Socket.IO; shape lives here) ----------
+  get gameInProgress(): boolean {
+    return this.running;
+  }
+
+  // ---- Level construction ---------------------------------------------------
+
+  /** Build the level from data (Decision C: JSON geometry). */
+  loadLevel(data: LevelData): void {
+    this.level.width = data.width;
+    this.level.height = data.height;
+    for (const e of data.entities) {
+      this.spawn(e.kind, e.id, { left: e.left, top: e.top, width: e.width, height: e.height });
+    }
+  }
+
+  /** Create one entity of `kind`, register it in the level, and return it. */
+  spawn(kind: EntityKind, id: string, geo: Geometry): Entity {
+    let entity: Entity;
+    switch (kind) {
+      case "queen": {
+        const q = new Queen(this, id);
+        this.level.toons[id] = q;
+        entity = q;
+        break;
+      }
+      case "worker": {
+        const w = new Worker(this, id);
+        this.level.toons[id] = w;
+        entity = w;
+        break;
+      }
+      case "shrine-speed": {
+        const s = new ShrineSpeed(this, id);
+        this.level.shrines.push(s);
+        entity = s;
+        break;
+      }
+      case "shrine-warrior": {
+        const s = new ShrineWarrior(this, id);
+        this.level.shrines.push(s);
+        entity = s;
+        break;
+      }
+      case "berry": {
+        const b = new Berry(this, id);
+        this.level.berries.push(b);
+        entity = b;
+        break;
+      }
+      case "goal": {
+        const g = new Goal(this, id);
+        this.level.goals.push(g);
+        entity = g;
+        break;
+      }
+      case "snail": {
+        const s = new Snail(this, id);
+        this.level.snail = s;
+        entity = s;
+        break;
+      }
+      case "cage": {
+        const c = new SnailCage(this, id);
+        this.level.snailCages.push(c);
+        entity = c;
+        break;
+      }
+      case "egg": {
+        const egg = new Egg(this, id);
+        this.level.eggs.push(egg);
+        entity = egg;
+        break;
+      }
+      case "ground":
+      case "wall": {
+        const gr = new Ground(this, id);
+        this.level.ground.push(gr);
+        entity = gr;
+        break;
+      }
+    }
+    entity.left = geo.left;
+    entity.top = geo.top;
+    entity.width = geo.width;
+    entity.height = geo.height;
+    this.entities.push(entity);
+    return entity;
+  }
+
+  // ---- Match lifecycle ------------------------------------------------------
+
+  /** Begin the match: reset everything (queens hatch eggs) and run the loop. */
+  start(): void {
+    // eggs reset first so queens can hatch from a fresh set (legacy priority)
+    for (const egg of this.level.eggs) egg.reset();
+    for (const e of this.entities) {
+      if (e instanceof Egg || e instanceof Queen) continue;
+      e.reset();
+    }
+    for (const key of Object.keys(this.level.toons)) {
+      const toon = this.level.toons[key];
+      if (toon instanceof Queen) toon.reset();
+    }
+    this.running = true;
+    this.lastWin = null;
+    this.events.emit(CONST.GAME_START);
+  }
+
+  stop(): void {
+    this.running = false;
+  }
+
+  /** Resolve a win, record/emit it, and stop the match. */
+  win(type: WinType, team: Team, focus: Entity): void {
+    const payload: GameWin = { type, team, focus: { left: focus.left, top: focus.top } };
+    this.lastWin = payload;
+    this.running = false;
+    this.events.emit(CONST.GAME_WIN, payload);
+  }
+
+  // ---- The loop -------------------------------------------------------------
+
+  /** Advance the simulation by `times` ticks. */
+  tick(times = 1): void {
+    for (let i = 0; i < times; i++) this.step();
+  }
+
+  /** Advance game-time without simulating (for time-based assertions). */
+  advanceClock(ms: number): void {
+    this.clock += ms;
+  }
+
+  private step(): void {
+    this.clock += LOOP_MS;
+
+    // 1) entity loops (physics + collision checks), in creation order
+    for (const e of this.entities) e.loop();
+
+    // 2) apply each user's held keys to their toon (legacy Game.loop order:
+    //    movement is applied after the per-entity physics pass)
+    for (const user of this.users) {
+      if (!user.toonId) continue;
+      const toon = this.level.toons[user.toonId];
+      if (!toon) continue;
+      for (const key of user.keys) {
+        switch (key) {
+          case CONST.KEY_UP:
+            toon.jump();
+            break;
+          case CONST.KEY_DOWN:
+            toon.goDown();
+            break;
+          case CONST.KEY_LEFT:
+            toon.goLeft();
+            break;
+          case CONST.KEY_RIGHT:
+            toon.goRight();
+            break;
+        }
+      }
+      // jump can't be held: consume ArrowUp each tick so it can't repeat-fire
+      const up = user.keys.indexOf(CONST.KEY_UP);
+      if (up >= 0) user.keys.splice(up, 1);
+    }
+  }
+
+  /** Collect the changed-entity diff batch (full snapshot for now). */
+  collectUpdates(): VirtualUpdate {
+    return this.entities.map((e) => e.stripped());
+  }
+
+  // ---- Lobby (Phase 2) ------------------------------------------------------
 
   addUser(user: SessionUser): void {
     this.users.push(user);
@@ -61,10 +266,11 @@ export class GameSession {
     if (i >= 0) this.users.splice(i, 1);
   }
 
-  /**
-   * Claim a character. Returns false (and emits ALERT) if already taken.
-   * Logic ported in Phase 2.
-   */
+  updateKeys(userId: string, keys: string[]): void {
+    const user = this.users.find((u) => u.id === userId);
+    if (user) user.keys = keys;
+  }
+
   selectCharacter(_userId: string, _toonId: string): boolean {
     return notImplemented("selectCharacter");
   }
@@ -73,47 +279,7 @@ export class GameSession {
     notImplemented("setReady");
   }
 
-  updateKeys(userId: string, keys: string[]): void {
-    const user = this.users.find((u) => u.id === userId);
-    if (user) user.keys = keys;
-  }
-
-  /** Current lobby state for a MENU_UPDATE. */
   getMenuState(): MenuUpdate {
     return notImplemented("getMenuState");
   }
-
-  // ---- Simulation (Phase 1) -----------------------------------------------
-
-  /** Begin the match: spawn toons from eggs, start the loop. */
-  start(): void {
-    notImplemented("start");
-  }
-
-  /** One ~60fps tick: read held keys, drive toons, flush VIRTUAL_UPDATE diffs. */
-  loop(): void {
-    notImplemented("loop");
-  }
-
-  /** Collect the changed-entity diff batch for this tick. */
-  collectUpdates(): VirtualUpdate {
-    return notImplemented("collectUpdates");
-  }
-
-  /** Resolve a win and tear down the match. */
-  win(_type: WinType, _team: Team, _focus: GameWin["focus"]): void {
-    notImplemented("win");
-  }
-
-  stop(): void {
-    if (this.loopHandle) {
-      clearInterval(this.loopHandle);
-      this.loopHandle = null;
-    }
-    this.gameInProgress = false;
-  }
-
-  // The loop runs at ~60fps once implemented (Phase 1).
-  protected readonly loopIntervalMs = 1000 / 60;
-  protected readonly tuning = CONST;
 }
